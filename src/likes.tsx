@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Grid } from "@raycast/api";
 
 // Hooks
-import { useLikes } from "@/hooks/useLikes";
+import { useLikes2 } from "@/hooks/useLikes";
 
 // Components
 import Actions from "@/components/Actions";
@@ -15,7 +15,7 @@ interface SearchListItemProps {
 }
 
 const UnsplashLikes = () => {
-  const { loading, likes } = useLikes();
+  const { loading, likes } = useLikes2();
   const itemSize = getGridItemSize();
   const [unliked, setUnliked] = useState<string[]>([]);
 

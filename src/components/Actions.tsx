@@ -1,11 +1,12 @@
 import { ActionPanel, Icon, useNavigation, getPreferenceValues, Action } from "@raycast/api";
-import { likeOrDislike } from "@/functions/utils";
+import { likeOrDislike2 } from "@/functions/utils";
 import { useState } from "react";
+import { runtime } from "../service"
 
 // Functions
-import { saveImage } from "@/functions/saveImage";
-import { setWallpaper } from "@/functions/setWallpaper";
-import { copyFileToClipboard } from "@/functions/copyFileToClipboard";
+import { saveImage2 } from "@/functions/saveImage";
+import { setWallpaper2 } from "@/functions/setWallpaper";
+import { copyFileToClipboard2 } from "@/functions/copyFileToClipboard";
 
 // Components
 import Details from "@/views/Details";
@@ -31,7 +32,7 @@ export const Sections = ({ details = false, item, unlike }: BaseProps) => {
   const imageUrl = item.urls?.raw || item.urls?.full || item.urls?.regular || item.urls?.small;
 
   const handleLike = async () => {
-    await likeOrDislike(item.id, liked);
+    await likeOrDislike2(item.id, liked).pipe(runtime.runPromise);
 
     if (liked && unlike) unlike((p) => [...p, String(item.id)]);
     setLiked(!liked);
@@ -74,14 +75,14 @@ export const Sections = ({ details = false, item, unlike }: BaseProps) => {
               title="Copy to Clipboard"
               icon={Icon.Clipboard}
               shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
-              onAction={() => copyFileToClipboard(clipboardCopyUrl)}
+              onAction={() => copyFileToClipboard2(clipboardCopyUrl)}
             />
 
             <Action
               title="Download Image"
               icon={Icon.Desktop}
               shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
-              onAction={() => saveImage({ url: imageUrl, id: String(item.id) })}
+              onAction={() => saveImage2({ url: imageUrl, id: String(item.id) })}
             />
           </ActionPanel.Section>
 
@@ -90,14 +91,14 @@ export const Sections = ({ details = false, item, unlike }: BaseProps) => {
               title="Current Monitor"
               icon={Icon.Desktop}
               shortcut={{ modifiers: ["cmd", "shift"], key: "w" }}
-              onAction={() => setWallpaper({ url: imageUrl, id: String(item.id) })}
+              onAction={() => setWallpaper2({ url: imageUrl, id: String(item.id) })}
             />
 
             <Action
               title="Every Monitor"
               icon={Icon.Desktop}
               shortcut={{ modifiers: ["shift", "opt"], key: "w" }}
-              onAction={() => setWallpaper({ url: imageUrl, id: String(item.id), every: true })}
+              onAction={() => setWallpaper2({ url: imageUrl, id: String(item.id), every: true }).pipe(runtime.runPromise)}
             />
           </ActionPanel.Section>
         </>

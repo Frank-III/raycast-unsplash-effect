@@ -1,49 +1,86 @@
 import { LocalStorage, OAuth, getPreferenceValues } from "@raycast/api";
 import fetch, { type RequestInit } from "node-fetch";
-import { client, doAuth } from "@/oauth";
+import { AuthClient, doAuth2 } from "@/oauth";
+import { URLSearchParams } from "url";
+import { AbortError as FetchAbortError } from "node-fetch";
+import {Effect as E, Option as O, Data, Console} from "effect"
+import * as HttpClient from "@effect/platform/HttpClient";
 
 const { accessKey } = getPreferenceValues<UnsplashPreferences>();
 
-export const apiRequest = async <T>(path: string, options?: RequestInit) => {
-  const tokens = await client.getTokens();
-  let accessToken = tokens?.accessToken;
+export class AbortError extends Data.TaggedError("AbortError")<{
+  e: unknown
+}> {}
 
-  if (!accessToken) {
-    await LocalStorage.clear();
-    await doAuth();
-    accessToken = (await client.getTokens())?.accessToken;
-  } else if (tokens?.refreshToken && tokens?.isExpired()) {
-    await client.setTokens(await refreshTokens(tokens.refreshToken));
-    accessToken = (await client.getTokens())?.accessToken;
-  }
+
+export class FetchError extends Data.TaggedError("FetchError")<{
+  e: unknown
+}> {}
+
+
+export const apiRequest2 = <T>(path: string, options?: RequestInit) => E.gen(function* () {
+  const { client } = yield* AuthClient
+
+  const getToken = E.promise(() => client.getTokens())//.pipe(E.tap((tokens) => Console.log("get Tokens:",tokens)))
+
+  const tokens = yield* getToken
+  const getAccessToken = O.fromNullable(tokens?.accessToken).pipe(
+    O.match({
+      onNone: () => E.promise(LocalStorage.clear).pipe(
+        E.zipRight(doAuth2),
+        E.zipRight(getToken),
+        E.map((tokens) => tokens?.accessToken)
+      ),
+      onSome: (accessToken) => E.if(tokens?.refreshToken !== undefined && tokens?.isExpired(), {
+        onTrue: () => refreshToken2(tokens?.refreshToken || "").pipe(
+          E.flatMap((refreshToken) => E.promise(() => client.setTokens({ accessToken, refreshToken }))),
+          E.zipRight(getToken),
+          E.map((tokens) => tokens?.accessToken)
+        ),
+        onFalse: () => E.succeed(accessToken)
+      })
+    }),
+    // E.tap((token) => Console.log(token))
+  )
+
+  const accessToken = yield* getAccessToken
 
   const url = path.startsWith("https://api.unsplash.com/") ? path : `https://api.unsplash.com${path}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...options?.headers,
-    },
-  }).then(async (res) => res.json() as Promise<T>);
-  return response;
-};
+  const response = yield* E.tryPromise({
+    try: () => fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...options?.headers,
+      },
+      }).then((res) => res.json() as T),
+    catch: (e) => {
+      if (e instanceof FetchAbortError) {
+        return new AbortError({ e }) 
+      }
+      // console.log("fetcherror", e) 
+      return new FetchError({e})
+    }})
 
-async function refreshTokens(refreshToken: string) {
-  const params = new URLSearchParams();
+  return response
+})
 
-  params.append("client_id", accessKey.trim());
-  params.append("refresh_token", refreshToken.trim());
-  params.append("grant_type", "refresh_token");
+const refreshToken2 = (refreshToken: string) => E.gen(function* () {
+  const params = HttpClient.urlParams.fromInput({
+    "client_id": accessKey,
+    "refresh_token": refreshToken,
+    "grant_type": "refresh_token"
+  })
 
-  const response = await fetch("https://unsplash.com/oauth/token", { method: "POST", body: params });
-  if (!response.ok) {
-    console.error("refresh tokens error:", await response.text());
-    throw new Error(response.statusText);
-  }
-
-  const tokenResponse = (await response.json()) as OAuth.TokenResponse;
-  tokenResponse.refresh_token = tokenResponse.refresh_token ?? refreshToken;
-
-  return tokenResponse;
-}
+  const response = (
+    yield* HttpClient.request.post("https://unsplash.com/oauth/token", {
+    body: HttpClient.body.urlParams(params)
+    }).pipe(
+      HttpClient.client.fetch,
+      HttpClient.response.json
+      // E.catchAll((e) => E.fail(new AuthError({ error: { _tag: "AuthTokensError", error: e } })))
+    )
+  ) as OAuth.TokenResponse 
+  return response.refresh_token ?? refreshToken
+})

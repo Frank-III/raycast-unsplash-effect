@@ -1,12 +1,17 @@
 import { showToast, Toast } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
-import { AbortError } from "node-fetch";
+import { apiRequest2 } from "@/functions/apiRequest";
+import { Effect as E, Console } from "effect";
 import { URLSearchParams } from "url";
+import { runtime } from "@/service";
+// import { AbortError } from "@/functions/apiRequest";
+
 
 export const useSearch = <T extends "collections" | "photos">(
   type: T,
   orientation: "all" | "landscape" | "portrait" | "squarish"
 ) => {
+
   const [state, setState] = useState<SearchState<T>>({ results: [], isLoading: true });
   const [lastSearch, setLastSearch] = useState("");
   const cancelRef = useRef<AbortController | null>(null);
@@ -19,22 +24,15 @@ export const useSearch = <T extends "collections" | "photos">(
     };
   }, []);
 
-  useEffect(() => {
-    if (lastSearch === "") return;
-    search(lastSearch);
-  }, [orientation]);
-
-  const search = async (searchText: string) => {
-    cancelRef.current?.abort();
-    cancelRef.current = new AbortController();
-
-    try {
+  const search = (searchText: string) => 
+    E.gen(function* () {
+      cancelRef.current?.abort();
+      cancelRef.current = new AbortController();
       if (searchText === "") {
         setState((oldState) => ({
           ...oldState,
           isLoading: false,
         }));
-
         return;
       }
 
@@ -42,22 +40,25 @@ export const useSearch = <T extends "collections" | "photos">(
         ...oldState,
         isLoading: true,
       }));
-
-      const { errors, results } = (await performSearch({
+    
+      const {errors, results} = yield* performSearch({
         signal: cancelRef.current?.signal,
-
         // Text
         searchText,
-
         // Options
         options: {
           orientation,
           type: type || "photos",
         },
-      })) as {
-        errors?: string[];
-        results: T extends "collections" ? CollectionResult[] : SearchResult[];
-      };
+      }).pipe(
+        // catch AbortError
+        // E.tap((_) => Console.log(_)),
+        // E.catchTag("AbortError", (e) => E.void),
+        E.tapError((e) => Console.debug(e)),
+        E.tapError((e) => E.promise(() => {
+          return showToast(Toast.Style.Failure, "Could not perform search.", String(e));
+        }))
+      )
 
       if (errors?.length) {
         showToast(Toast.Style.Failure, `Failed to fetch ${type}.`, errors?.join("\n"));
@@ -68,24 +69,17 @@ export const useSearch = <T extends "collections" | "photos">(
       setState((oldState) => ({
         ...oldState,
         isLoading: false,
-        results: results || [],
+        results: results as any || [],
       }));
-    } catch (error) {
-      if (error instanceof AbortError) {
-        return;
-      }
+    }).pipe(runtime.runPromise)
 
-      showToast(Toast.Style.Failure, "Could not perform search", String(error));
+    return {
+      state, 
+      search
     }
-  };
+    
+}
 
-  return {
-    state,
-    search,
-  };
-};
-
-// Perform Search
 interface PerformSearchProps {
   signal: AbortSignal;
   searchText: string;
@@ -99,11 +93,11 @@ type SearchOrCollectionResult<T extends PerformSearchProps> = T extends { option
   ? CollectionResult[]
   : SearchResult[];
 
-export const performSearch = async <T extends PerformSearchProps>({
+export const performSearch = <T extends PerformSearchProps>({
   searchText,
   options,
   signal,
-}: PerformSearchProps): Promise<{ errors?: string[]; results: SearchOrCollectionResult<T> }> => {
+}: PerformSearchProps) => E.gen(function* () {
   const searchParams = new URLSearchParams({
     page: "1",
     query: searchText,
@@ -112,17 +106,14 @@ export const performSearch = async <T extends PerformSearchProps>({
 
   if (options.orientation !== "all") searchParams.append("orientation", options.orientation);
 
-  const { errors, results } = await apiRequest<{ errors?: string[]; results: SearchOrCollectionResult<T> }>(
+  return yield* apiRequest2<{ errors?: string[]; results: SearchOrCollectionResult<T> }>(
     `/search/${options.type}?${searchParams.toString()}`,
     {
-      signal,
+      signal
     }
-  );
+  )
 
-  return {
-    results,
-    errors,
-  };
-};
+})
+
 
 export default useSearch;

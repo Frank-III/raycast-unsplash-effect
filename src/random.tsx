@@ -1,10 +1,11 @@
-import { useRandom } from "@/hooks/useRandom";
+import { useRandom2 } from "@/hooks/useRandom";
 import { environment, LaunchType, getPreferenceValues, LocalStorage } from "@raycast/api";
+import {Effect as E} from "effect"
 
-const setRandomWallpaper = async () => {
-  const nowDate = new Date();
+const setRandomWallpaper2 = E.gen(function* () {
+  const nowDate = new Date()
   const { updateTime } = getPreferenceValues<UnsplashPreferences>();
-  const lastTime = await LocalStorage.getItem<string>("last-time");
+  const lastTime = yield* E.promise(() => LocalStorage.getItem<string>("last-time"))
 
   if (environment.launchType === LaunchType.Background) {
     if (updateTime !== "none" && lastTime !== undefined) {
@@ -26,12 +27,14 @@ const setRandomWallpaper = async () => {
       lastDate.setSeconds(lastDate.getSeconds() - 10);
 
       if (lastDate <= nowDate) {
-        await useRandom(nowDate.getTime());
+        yield* useRandom2(nowDate.getTime());
       }
     }
   } else {
-    await useRandom(nowDate.getTime());
+    yield* useRandom2(nowDate.getTime());
   }
-};
 
-export default setRandomWallpaper;
+})
+
+
+export default setRandomWallpaper2;

@@ -3,7 +3,7 @@ import { Grid } from "@raycast/api";
 import { getGridItemSize, showImageTitle, toTitleCase } from "@/functions/utils";
 
 // Hooks
-import { useSearch } from "@/hooks/useSearch";
+import { useSearch } from "@/hooks/useSearch2";
 
 // Components
 import Actions from "@/components/ActionsCollection";

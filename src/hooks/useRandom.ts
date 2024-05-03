@@ -1,8 +1,10 @@
 import { getPreferenceValues, showHUD, environment, LaunchType, LocalStorage } from "@raycast/api";
-import { apiRequest } from "@/functions/apiRequest";
+import {  apiRequest2 } from "@/functions/apiRequest";
+import { Effect as E } from "effect";
 
 // Functions
-import setWallpaper from "@/functions/setWallpaper";
+import setWallpaper, { setWallpaper2 } from "@/functions/setWallpaper";
+import { catchAll } from "effect/Layer";
 
 const defaultCollections = [
   "4324303", // Vinyl and Covers
@@ -17,7 +19,8 @@ const defaultCollections = [
   "932210", // Snow
 ];
 
-export const useRandom = async (nowTime: number) => {
+export const useRandom2 = (nowTime: number) => E.gen(function*() {
+
   const { collections, includeDefaults } = getPreferenceValues();
 
   const customCollections = collections?.split(", ");
@@ -27,29 +30,29 @@ export const useRandom = async (nowTime: number) => {
       ? [...defaultCollections, ...customCollections]
       : customCollections || defaultCollections;
 
-  const response = await apiRequest<SearchResult>(
+  //FIXME: how to early exit here --> Fixed
+  const response = yield* apiRequest2<SearchResult>(
     `/photos/random?orientation=landscape&collections=${encodeURIComponent(whichCollections.join(","))}`
-  );
+  ).pipe(
+    E.tapError((e) => E.promise(() => showHUD(e.message)).pipe(E.zipRight(E.fail(e))))
+  )
 
-  if (response.errors) {
-    showHUD(response.errors[0]);
-    return;
-  }
-
-  const { urls, id } = response;
-
+  const {urls, id} = response
   const image = urls?.raw || urls?.full || urls?.regular;
-  const result = await setWallpaper({
+
+  const result = yield* setWallpaper2({
     url: image,
     id: String(id),
     useHud: true,
     every: true,
     isBackground: environment.launchType === LaunchType.Background,
-  });
+  })
 
-  if (result) {
-    await LocalStorage.setItem("last-time", nowTime);
-  }
-};
+  E.promise(() => LocalStorage.setItem("last-time", nowTime)).pipe(
+    E.when(() => result)
+  )
+})
 
-export default useRandom;
+
+
+export default useRandom2;

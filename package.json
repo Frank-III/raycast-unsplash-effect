@@ -6,7 +6,8 @@
   "icon": "command-icon.png",
   "author": "eggsy",
   "contributors": [
-    "Kang"
+    "Kang",
+    "Frank-III"
   ],
   "license": "MIT",
   "keywords": [
@@ -311,7 +312,9 @@
     }
   ],
   "dependencies": {
+    "@effect/platform": "^0.50.7",
     "@raycast/api": "^1.38.2",
+    "effect": "^3.0.7",
     "node-fetch": "^3.0.0",
     "run-applescript": "^6.0.0",
     "swr": "^1.2.0"
